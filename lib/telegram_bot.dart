@@ -26,7 +26,6 @@ class TelegramBot {
   late GarbageData data = GarbageData();
 
   Future<void> initialize() async {
-
     IcsParser.parseDates(data);
     var telegram = Telegram(Env.apiKey);
 
@@ -34,9 +33,12 @@ class TelegramBot {
     for (var element in _commands) {
       botCommands.add(element.command);
     }
-    botCommands.add(BotCommand(command: 'erledigt', description: 'Müll wurde rausgestellt'));
-    botCommands.add(BotCommand(command: 'start', description: 'Starte die Reminder von Oscar'));
-    botCommands.add(BotCommand(command: 'stop', description: 'Genug von Oscar genervt worden'));
+    botCommands.add(BotCommand(
+        command: 'erledigt', description: 'Müll wurde rausgestellt'));
+    botCommands.add(BotCommand(
+        command: 'start', description: 'Starte die Reminder von Oscar'));
+    botCommands.add(BotCommand(
+        command: 'stop', description: 'Genug von Oscar genervt worden'));
     telegram.setMyCommands(botCommands);
 
     var event = Event((await telegram.getMe()).username!);
@@ -51,25 +53,25 @@ class TelegramBot {
         .onCommand('stop')
         .listen((message) => message.reply(stop(message)));
 
-    teledart
-        .onCommand('erledigt')
-        .listen((message) => done(teledart));
+    teledart.onCommand('erledigt').listen((message) => done(teledart));
 
-    for(var command in _commands) {
-      teledart.onCommand(command.command.command).listen((message) => message.reply(data.getNextDate(command.type)));
+    for (var command in _commands) {
+      teledart
+          .onCommand(command.command.command)
+          .listen((message) => message.reply(data.getNextDate(command.type)));
     }
     teledart.start();
 
     var now = DateTime.now();
     now.add(Duration(minutes: 1));
 
-    Cron().schedule(Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
-
+    Cron().schedule(
+        Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
   }
 
   void executeCheck(TeleDart teledart) {
     var tomorrowTypes = data.checkTomorrow();
-    if(tomorrowTypes.isEmpty) {
+    if (tomorrowTypes.isEmpty) {
       _currentRunningDay = null;
       return;
     }
@@ -78,28 +80,31 @@ class TelegramBot {
   }
 
   void alert(TeleDart teledart, List<GarbageType> tomorrowTypes) {
-    if(_currentRunningDay == null) {
+    if (_currentRunningDay == null) {
       return;
     }
 
-    if(_currentRunningDay != null && _currentRunningDay!.isBefore(Helper.today())) {
-      for(var chatId in _registeredChats) {
-        teledart.sendMessage(chatId, 'Es wurde wohl vergessen den Müll rauszubringen!');
+    if (_currentRunningDay != null &&
+        _currentRunningDay!.isBefore(Helper.today())) {
+      for (var chatId in _registeredChats) {
+        teledart.sendMessage(
+            chatId, 'Es wurde wohl vergessen den Müll rauszubringen!');
       }
       _currentRunningDay = null;
       return;
     }
 
-    for(var chatId in _registeredChats) {
+    for (var chatId in _registeredChats) {
       var garbageNames = List.empty(growable: true);
       for (var element in tomorrowTypes) {
         garbageNames.add(GarbageTypeName.getName(element));
       }
 
-      teledart.sendMessage(chatId, 'Morgen muss der Müll raus: ${garbageNames.join(', ')}');
+      teledart.sendMessage(
+          chatId, 'Morgen muss der Müll raus: ${garbageNames.join(', ')}');
     }
 
-    Future.delayed(_penetrationDuration,() => alert(teledart, tomorrowTypes));
+    Future.delayed(_penetrationDuration, () => alert(teledart, tomorrowTypes));
   }
 
   String start(TeleDartMessage message) {
@@ -107,7 +112,6 @@ class TelegramBot {
     _registeredChats.add(chatId);
     return 'Ab jetzt gibts Nachrichten wenn der Müll raus muss';
   }
-
 
   String stop(TeleDartMessage message) {
     var chatId = message.chat.id;
@@ -117,7 +121,7 @@ class TelegramBot {
 
   void done(TeleDart teledart) {
     _currentRunningDay = null;
-    for(var chatId in _registeredChats) {
+    for (var chatId in _registeredChats) {
       teledart.sendMessage(chatId, 'Müll wurde rausgebracht');
     }
   }

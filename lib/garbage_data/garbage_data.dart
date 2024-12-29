@@ -17,7 +17,7 @@ class GarbageData {
     }
     var nextDate = _dates[type]?.reduce((a, b) => _checkDate(a, b));
     var now = Helper.today();
-    if(nextDate!.isBefore(now)  || nextDate.isAtSameMomentAs(now)) {
+    if (nextDate!.isBefore(now) || nextDate.isAtSameMomentAs(now)) {
       throw NoDateFoundException();
     }
     return nextDate;
@@ -29,18 +29,17 @@ class GarbageData {
       var formatter = DateFormat('dd.MM.yyyy');
       var formatted = formatter.format(nextDate);
       return 'Die nächste Leerung ist am $formatted';
-    }
-    on NoDateFoundException {
+    } on NoDateFoundException {
       return 'Leider wird der Behälter nie wieder geleert ';
     }
   }
-  
+
   DateTime _checkDate(DateTime a, DateTime b) {
     var now = Helper.today();
-    if(a.isBefore(now) || a.isAtSameMomentAs(now)) {
+    if (a.isBefore(now) || a.isAtSameMomentAs(now)) {
       return b;
     }
-    if(b.isBefore(now)  || b.isAtSameMomentAs(now)) {
+    if (b.isBefore(now) || b.isAtSameMomentAs(now)) {
       return a;
     }
     return a.difference(now).abs() < b.difference(now).abs() ? a : b;
@@ -48,9 +47,9 @@ class GarbageData {
 
   List<GarbageType> checkTomorrow() {
     var retVal = List<GarbageType>.empty(growable: true);
-    for(var type in GarbageType.values) {
+    for (var type in GarbageType.values) {
       var next = _getNextDate(type);
-      if(Helper.today().add(Duration(days:1)).isAtSameMomentAs(next)) {
+      if (Helper.today().add(Duration(days: 1)).isAtSameMomentAs(next)) {
         retVal.add(type);
       }
     }

@@ -1,3 +1,1 @@
-class NoDateFoundException implements Exception {
-
-}
+class NoDateFoundException implements Exception {}
