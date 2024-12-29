@@ -1,0 +1,21 @@
+name: avl_telegram_bot
+description: A sample command-line application.
+version: 0.1.0
+# repository: https://github.com/my_org/my_repo
+
+environment:
+  sdk: ^3.6.0
+
+# Add regular dependencies here.
+dependencies:
+  cron: ^0.6.1
+  icalendar_parser: ^2.1.0
+  teledart: ^0.6.1
+  intl: ^0.20.1
+  envied: ^1.0.0
+
+dev_dependencies:
+  build_runner: ^2.4.14
+  envied_generator: ^1.0.0
+  lints: ^5.0.0
+  test: ^1.24.0
