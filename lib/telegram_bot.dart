@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io' as io;
 import 'package:avl_telegram_bot/env/env.dart';
 import 'package:cron/cron.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_data.dart';
@@ -9,10 +7,11 @@ import 'package:teledart/model.dart';
 import 'package:teledart/teledart.dart';
 import 'package:teledart/telegram.dart';
 
+import 'chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
 
 class TelegramBot {
-  final _registeredChats = <int>{};
+  final Set<int> _registeredChats = {};
   final _penetrationDuration = Duration(minutes: 45);
   final _penetrationStartCron = '00 19 * * *';
   DateTime? _currentRunningDay;
@@ -26,11 +25,12 @@ class TelegramBot {
   ];
 
   late GarbageData data = GarbageData();
-  final _chatsFile = io.File('registered_chats.json');
+  late ChatStorage _chatStorage;
 
   Future<void> initialize() async {
     IcsParser.parseDates(data);
-    await _loadChats();
+    _chatStorage = ChatStorage('registered_chats.json');
+    _registeredChats.addAll(await _chatStorage.loadChats());
     var telegram = Telegram(Env.apiKey);
 
     var botCommands = List<BotCommand>.empty(growable: true);
@@ -71,19 +71,6 @@ class TelegramBot {
 
     Cron().schedule(
         Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
-  }
-
-  Future<void> _loadChats() async {
-    if (await _chatsFile.exists()) {
-      var jsonString = await _chatsFile.readAsString();
-      var chatIds = jsonDecode(jsonString) as List<dynamic>;
-      _registeredChats.addAll(chatIds.map((id) => id as int));
-    }
-  }
-
-  Future<void> _saveChats() async {
-    var jsonString = jsonEncode(_registeredChats.toList());
-    await _chatsFile.writeAsString(jsonString);
   }
 
   void executeCheck(TeleDart teledart) {
@@ -127,14 +114,14 @@ class TelegramBot {
   String start(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.add(chatId);
-    _saveChats();
+    _chatStorage.saveChats(_registeredChats);
     return 'Ab jetzt gibts Nachrichten wenn der Müll raus muss';
   }
 
   String stop(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.remove(chatId);
-    _saveChats();
+    _chatStorage.saveChats(_registeredChats);
     return 'Ab jetzt gibts keine Nachrichten mehr wenn der Müll raus muss';
   }
 
