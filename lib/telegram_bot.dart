@@ -28,11 +28,27 @@ class TelegramBot {
   late ChatStorage _chatStorage;
 
   Future<void> initialize() async {
+    initializeData();
+    await initializeChatStorage();
+    var telegram = Telegram(Env.apiKey);
+    setupBotCommands(telegram);
+    var event = Event((await telegram.getMe()).username!);
+    var teledart = TeleDart(Env.apiKey, event);
+    setupEventListeners(teledart);
+    startBot(teledart);
+    scheduleCron(teledart);
+  }
+
+  void initializeData() {
     IcsParser.parseDates(data);
+  }
+
+  Future<void> initializeChatStorage() async {
     _chatStorage = ChatStorage('registered_chats.json');
     _registeredChats.addAll(await _chatStorage.loadChats());
-    var telegram = Telegram(Env.apiKey);
+  }
 
+  void setupBotCommands(Telegram telegram) {
     var botCommands = List<BotCommand>.empty(growable: true);
     for (var element in _commands) {
       botCommands.add(element.command);
@@ -44,11 +60,9 @@ class TelegramBot {
     botCommands.add(BotCommand(
         command: 'stop', description: 'Genug von Oscar genervt worden'));
     telegram.setMyCommands(botCommands);
+  }
 
-    var event = Event((await telegram.getMe()).username!);
-
-    var teledart = TeleDart(Env.apiKey, event);
-
+  void setupEventListeners(TeleDart teledart) {
     teledart
         .onCommand('start')
         .listen((message) => message.reply(start(message)));
@@ -64,11 +78,13 @@ class TelegramBot {
           .onCommand(command.command.command)
           .listen((message) => message.reply(data.getNextDate(command.type)));
     }
+  }
+
+  void startBot(TeleDart teledart) {
     teledart.start();
+  }
 
-    var now = DateTime.now();
-    now.add(Duration(minutes: 1));
-
+  void scheduleCron(TeleDart teledart) {
     Cron().schedule(
         Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
   }
