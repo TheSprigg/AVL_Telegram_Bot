@@ -1,4 +1,5 @@
 import 'package:avl_telegram_bot/env/env.dart';
+import 'package:logging/logging.dart';
 import 'package:cron/cron.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_data.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_type.dart';
@@ -8,11 +9,14 @@ import 'package:teledart/teledart.dart';
 import 'package:teledart/telegram.dart';
 
 import 'config/bot_config.dart';
+import 'services/logging_service.dart';
 import 'storage/chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
 import 'services/notification_service.dart';
 
+
 class TelegramBot {
+  final Logger _logger = Logger('TelegramBot');
   final Set<int> _registeredChats = {};
   final _reminderDuration = BotConfig.reminderDuration;
   final _reminderCron = BotConfig.reminderCron;
@@ -31,16 +35,23 @@ class TelegramBot {
   late NotificationService _notificationService;
 
   Future<void> initialize() async {
-    initializeData();
-    await initializeChatStorage();
-    var telegram = Telegram(Env.apiKey);
-    setupBotCommands(telegram);
-    var event = Event((await telegram.getMe()).username!);
-    var teledart = TeleDart(Env.apiKey, event);
-    _notificationService = NotificationService(teledart, _registeredChats);
-    setupEventListeners(teledart);
-    startBot(teledart);
-    scheduleCron(teledart);
+    LoggingService.initialize();
+    try {
+      initializeData();
+      await initializeChatStorage();
+      var telegram = Telegram(Env.apiKey);
+      setupBotCommands(telegram);
+      var event = Event((await telegram.getMe()).username!);
+      final teledart = TeleDart(Env.apiKey, event);
+      _notificationService = NotificationService(teledart, _registeredChats);
+      _logger.info('Bot initialized successfully.');
+      setupEventListeners(teledart);
+      startBot(teledart);
+      scheduleCron(teledart);
+    } catch (e, st) {
+      _logger.severe('Error during initialization: $e', e, st);
+      rethrow;
+    }
   }
 
   void initializeData() {

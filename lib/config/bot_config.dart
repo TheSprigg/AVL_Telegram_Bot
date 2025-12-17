@@ -3,4 +3,5 @@ class BotConfig {
   static const String reminderCron = '00 19 * * *';
   static const String icsFilePath = 'res/dates.ics';
   static const String chatStorageFile = 'registered_chats.json';
+  static const String logFile = 'app.log';
 }
