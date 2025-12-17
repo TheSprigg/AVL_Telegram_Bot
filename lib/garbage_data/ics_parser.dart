@@ -31,7 +31,9 @@ class IcsParser {
       return;
     }
     var garbageType = _mapping[entry['summary']];
-    var date = (entry['dtstart'] as IcsDateTime).toDateTime();
-    data.addDate(garbageType!, date!);
+    var date = (entry['dtstart'] as IcsDateTime).toDateTime()?.toLocal();
+    if (date != null) {
+      data.addDate(garbageType!, date);
+    }
   }
 }

@@ -12,15 +12,16 @@ class GarbageData {
   }
 
   DateTime _getNextDate(GarbageType type) {
-    if (!_dates.containsKey(type)) {
+    if (!_dates.containsKey(type) || _dates[type]!.isEmpty) {
       throw NoDateFoundException();
     }
-    var nextDate = _dates[type]?.reduce((a, b) => _checkDate(a, b));
-    var now = Helper.today();
-    if (nextDate!.isBefore(now) || nextDate.isAtSameMomentAs(now)) {
+    var today = Helper.today();
+    var futureDates = _dates[type]!.where((date) => date.isAfter(today) || date.isAtSameMomentAs(today)).toList();
+    if (futureDates.isEmpty) {
       throw NoDateFoundException();
     }
-    return nextDate;
+    futureDates.sort((a, b) => a.compareTo(b));
+    return futureDates.first;
   }
 
   String getNextDate(GarbageType type) {
@@ -34,26 +35,19 @@ class GarbageData {
     }
   }
 
-  DateTime _checkDate(DateTime a, DateTime b) {
-    var now = Helper.today();
-    if (a.isBefore(now) || a.isAtSameMomentAs(now)) {
-      return b;
-    }
-    if (b.isBefore(now) || b.isAtSameMomentAs(now)) {
-      return a;
-    }
-    return a.difference(now).abs() < b.difference(now).abs() ? a : b;
-  }
-
   List<GarbageType> checkTomorrow() {
     var retVal = List<GarbageType>.empty(growable: true);
+    var tomorrow = Helper.today().add(Duration(days: 1));
     for (var type in GarbageType.values) {
-      var next = _getNextDate(type);
-      if (Helper.today().add(Duration(days: 1)).isAtSameMomentAs(next)) {
-        retVal.add(type);
+      try {
+        var next = _getNextDate(type);
+        if (next.isAtSameMomentAs(tomorrow)) {
+          retVal.add(type);
+        }
+      } on NoDateFoundException {
+        // Skip if no date found
       }
     }
-
     return retVal;
   }
 }
