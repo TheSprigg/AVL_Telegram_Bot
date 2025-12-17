@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io' as io;
 import 'package:avl_telegram_bot/env/env.dart';
 import 'package:cron/cron.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_data.dart';
@@ -24,9 +26,11 @@ class TelegramBot {
   ];
 
   late GarbageData data = GarbageData();
+  final _chatsFile = io.File('registered_chats.json');
 
   Future<void> initialize() async {
     IcsParser.parseDates(data);
+    await _loadChats();
     var telegram = Telegram(Env.apiKey);
 
     var botCommands = List<BotCommand>.empty(growable: true);
@@ -67,6 +71,19 @@ class TelegramBot {
 
     Cron().schedule(
         Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
+  }
+
+  Future<void> _loadChats() async {
+    if (await _chatsFile.exists()) {
+      var jsonString = await _chatsFile.readAsString();
+      var chatIds = jsonDecode(jsonString) as List<dynamic>;
+      _registeredChats.addAll(chatIds.map((id) => id as int));
+    }
+  }
+
+  Future<void> _saveChats() async {
+    var jsonString = jsonEncode(_registeredChats.toList());
+    await _chatsFile.writeAsString(jsonString);
   }
 
   void executeCheck(TeleDart teledart) {
@@ -110,12 +127,14 @@ class TelegramBot {
   String start(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.add(chatId);
+    _saveChats();
     return 'Ab jetzt gibts Nachrichten wenn der Müll raus muss';
   }
 
   String stop(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.remove(chatId);
+    _saveChats();
     return 'Ab jetzt gibts keine Nachrichten mehr wenn der Müll raus muss';
   }
 
