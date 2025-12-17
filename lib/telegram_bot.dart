@@ -7,9 +7,10 @@ import 'package:teledart/model.dart';
 import 'package:teledart/teledart.dart';
 import 'package:teledart/telegram.dart';
 
-import 'bot_config.dart';
-import 'chat_storage.dart';
+import 'config/bot_config.dart';
+import 'storage/chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
+import 'services/notification_service.dart';
 
 class TelegramBot {
   final Set<int> _registeredChats = {};
@@ -27,6 +28,7 @@ class TelegramBot {
 
   late GarbageData data = GarbageData();
   late ChatStorage _chatStorage;
+  late NotificationService _notificationService;
 
   Future<void> initialize() async {
     initializeData();
@@ -35,6 +37,7 @@ class TelegramBot {
     setupBotCommands(telegram);
     var event = Event((await telegram.getMe()).username!);
     var teledart = TeleDart(Env.apiKey, event);
+    _notificationService = NotificationService(teledart, _registeredChats);
     setupEventListeners(teledart);
     startBot(teledart);
     scheduleCron(teledart);
@@ -107,7 +110,7 @@ class TelegramBot {
 
     if (_currentRunningDay != null &&
         _currentRunningDay!.isBefore(Helper.today())) {
-      _sendMessageToAllChats(teledart, 'Es wurde wohl vergessen den Müll rauszubringen!');
+      _notificationService.sendToAll('Es wurde wohl vergessen den Müll rauszubringen!');
       _currentRunningDay = null;
       return;
     }
@@ -141,13 +144,7 @@ class TelegramBot {
 
   void done(TeleDart teledart) {
     _currentRunningDay = null;
-    _sendMessageToAllChats(teledart, 'Müll wurde rausgebracht');
-  }
-
-  void _sendMessageToAllChats(TeleDart teledart, String message) {
-    for (var chatId in _registeredChats) {
-      teledart.sendMessage(chatId, message);
-    }
+    _notificationService.sendToAll('Müll wurde rausgebracht');
   }
 }
 
