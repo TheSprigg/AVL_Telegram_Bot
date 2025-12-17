@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:avl_telegram_bot/env/env.dart';
 import 'package:logging/logging.dart';
 import 'package:cron/cron.dart';
@@ -14,13 +15,13 @@ import 'storage/chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
 import 'services/notification_service.dart';
 
-
 class TelegramBot {
   final Logger _logger = Logger('TelegramBot');
   final Set<int> _registeredChats = {};
   final _reminderDuration = BotConfig.reminderDuration;
   final _reminderCron = BotConfig.reminderCron;
   DateTime? _currentRunningDay;
+  Timer? _reminderTimer;
 
   final _commands = [
     _Command('gelb', 'Nächste gelbe Sack Leerung', GarbageType.yellow),
@@ -106,37 +107,38 @@ class TelegramBot {
 
   void executeCheck(TeleDart teledart) {
     var tomorrowTypes = data.checkTomorrow();
-    if (tomorrowTypes.isEmpty) {
+    if (tomorrowTypes.isEmpty || _currentRunningDay != null) {
       _currentRunningDay = null;
       return;
     }
     _currentRunningDay = Helper.today();
-    alert(teledart, tomorrowTypes);
+    startReminder(tomorrowTypes);
   }
 
-  void alert(TeleDart teledart, List<GarbageType> tomorrowTypes) {
-    if (_currentRunningDay == null) {
+  void startReminder(List<GarbageType> tomorrowTypes) {
+    _logger.info('Starting reminder cycle for ${tomorrowTypes.join(', ')}');
+    // Send initial alert
+    alert(tomorrowTypes);
+
+    // Schedule periodic reminders
+    _reminderTimer = Timer.periodic(_reminderDuration, (timer) {
+      alert(tomorrowTypes);
+    });
+  }
+
+  void alert(List<GarbageType> tomorrowTypes) {
+    if (_currentRunningDay == null) { // Check if the cycle was cancelled
+      _reminderTimer?.cancel();
       return;
     }
 
-    if (_currentRunningDay != null &&
-        _currentRunningDay!.isBefore(Helper.today())) {
+    if (_currentRunningDay!.isBefore(Helper.today())) {
       _notificationService.sendToAll('Es wurde wohl vergessen den Müll rauszubringen!');
-      _currentRunningDay = null;
-      return;
+      stopReminder();
+    } else {
+      final garbageNames = tomorrowTypes.map(GarbageTypeName.getName).join(', ');
+      _notificationService.sendToAll('Morgen muss der Müll raus: ${garbageNames}');
     }
-
-    for (var chatId in _registeredChats) {
-      var garbageNames = List.empty(growable: true);
-      for (var element in tomorrowTypes) {
-        garbageNames.add(GarbageTypeName.getName(element));
-      }
-
-      teledart.sendMessage(
-          chatId, 'Morgen muss der Müll raus: ${garbageNames.join(', ')}');
-    }
-
-    Future.delayed(_reminderDuration, () => alert(teledart, tomorrowTypes));
   }
 
   String start(TeleDartMessage message) {
@@ -153,9 +155,14 @@ class TelegramBot {
     return 'Ab jetzt gibts keine Nachrichten mehr wenn der Müll raus muss';
   }
 
-  void done(TeleDart teledart) {
+  void stopReminder() {
+    _reminderTimer?.cancel();
     _currentRunningDay = null;
-    _notificationService.sendToAll('Müll wurde rausgebracht');
+  }
+
+  void done(TeleDart teledart) {
+    stopReminder();
+    _notificationService.sendToAll('Müll wurde rausgebracht. Super!');
   }
 }
 
