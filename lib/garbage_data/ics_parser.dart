@@ -2,10 +2,11 @@ import 'dart:io';
 import 'package:icalendar_parser/icalendar_parser.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_type.dart';
 
+import '../bot_config.dart';
 import 'garbage_data.dart';
 
 class IcsParser {
-  static final _inputPath = 'res/dates.ics';
+  static final _inputPath = BotConfig.icsFilePath;
 
   static final Map<String, GarbageType> _mapping = {
     'Gelbe Tonne': GarbageType.yellow,

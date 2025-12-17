@@ -7,13 +7,14 @@ import 'package:teledart/model.dart';
 import 'package:teledart/teledart.dart';
 import 'package:teledart/telegram.dart';
 
+import 'bot_config.dart';
 import 'chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
 
 class TelegramBot {
   final Set<int> _registeredChats = {};
-  final _penetrationDuration = Duration(minutes: 45);
-  final _penetrationStartCron = '00 19 * * *';
+  final _reminderDuration = BotConfig.reminderDuration;
+  final _reminderCron = BotConfig.reminderCron;
   DateTime? _currentRunningDay;
 
   final _commands = [
@@ -44,7 +45,7 @@ class TelegramBot {
   }
 
   Future<void> initializeChatStorage() async {
-    _chatStorage = ChatStorage('registered_chats.json');
+    _chatStorage = ChatStorage(BotConfig.chatStorageFile);
     _registeredChats.addAll(await _chatStorage.loadChats());
   }
 
@@ -86,7 +87,7 @@ class TelegramBot {
 
   void scheduleCron(TeleDart teledart) {
     Cron().schedule(
-        Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
+        Schedule.parse(_reminderCron), () => executeCheck(teledart));
   }
 
   void executeCheck(TeleDart teledart) {
@@ -124,7 +125,7 @@ class TelegramBot {
           chatId, 'Morgen muss der Müll raus: ${garbageNames.join(', ')}');
     }
 
-    Future.delayed(_penetrationDuration, () => alert(teledart, tomorrowTypes));
+    Future.delayed(_reminderDuration, () => alert(teledart, tomorrowTypes));
   }
 
   String start(TeleDartMessage message) {
