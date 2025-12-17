@@ -107,10 +107,7 @@ class TelegramBot {
 
     if (_currentRunningDay != null &&
         _currentRunningDay!.isBefore(Helper.today())) {
-      for (var chatId in _registeredChats) {
-        teledart.sendMessage(
-            chatId, 'Es wurde wohl vergessen den Müll rauszubringen!');
-      }
+      _sendMessageToAllChats(teledart, 'Es wurde wohl vergessen den Müll rauszubringen!');
       _currentRunningDay = null;
       return;
     }
@@ -144,8 +141,12 @@ class TelegramBot {
 
   void done(TeleDart teledart) {
     _currentRunningDay = null;
+    _sendMessageToAllChats(teledart, 'Müll wurde rausgebracht');
+  }
+
+  void _sendMessageToAllChats(TeleDart teledart, String message) {
     for (var chatId in _registeredChats) {
-      teledart.sendMessage(chatId, 'Müll wurde rausgebracht');
+      teledart.sendMessage(chatId, message);
     }
   }
 }
