@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:avl_telegram_bot/env/env.dart';
+import 'package:logging/logging.dart';
 import 'package:cron/cron.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_data.dart';
 import 'package:avl_telegram_bot/garbage_data/garbage_type.dart';
@@ -7,13 +9,19 @@ import 'package:teledart/model.dart';
 import 'package:teledart/teledart.dart';
 import 'package:teledart/telegram.dart';
 
+import 'config/bot_config.dart';
+import 'services/logging_service.dart';
+import 'storage/chat_storage.dart';
 import 'garbage_data/ics_parser.dart';
+import 'services/notification_service.dart';
 
 class TelegramBot {
-  final _registeredChats = <int>{};
-  final _penetrationDuration = Duration(minutes: 45);
-  final _penetrationStartCron = '00 19 * * *';
+  final Logger _logger = Logger('TelegramBot');
+  final Set<int> _registeredChats = {};
+  final _reminderDuration = BotConfig.reminderDuration;
+  final _reminderCron = BotConfig.reminderCron;
   DateTime? _currentRunningDay;
+  Timer? _reminderTimer;
 
   final _commands = [
     _Command('gelb', 'Nächste gelbe Sack Leerung', GarbageType.yellow),
@@ -24,11 +32,39 @@ class TelegramBot {
   ];
 
   late GarbageData data = GarbageData();
+  late ChatStorage _chatStorage;
+  late NotificationService _notificationService;
 
   Future<void> initialize() async {
-    IcsParser.parseDates(data);
-    var telegram = Telegram(Env.apiKey);
+    LoggingService.initialize();
+    try {
+      initializeData();
+      await initializeChatStorage();
+      var telegram = Telegram(Env.apiKey);
+      setupBotCommands(telegram);
+      var event = Event((await telegram.getMe()).username!);
+      final teledart = TeleDart(Env.apiKey, event);
+      _notificationService = NotificationService(teledart, _registeredChats);
+      _logger.info('Bot initialized successfully.');
+      setupEventListeners(teledart);
+      startBot(teledart);
+      scheduleCron(teledart);
+    } catch (e, st) {
+      _logger.severe('Error during initialization: $e', e, st);
+      rethrow;
+    }
+  }
 
+  void initializeData() {
+    IcsParser.parseDates(data);
+  }
+
+  Future<void> initializeChatStorage() async {
+    _chatStorage = ChatStorage(BotConfig.chatStorageFile);
+    _registeredChats.addAll(await _chatStorage.loadChats());
+  }
+
+  void setupBotCommands(Telegram telegram) {
     var botCommands = List<BotCommand>.empty(growable: true);
     for (var element in _commands) {
       botCommands.add(element.command);
@@ -40,11 +76,9 @@ class TelegramBot {
     botCommands.add(BotCommand(
         command: 'stop', description: 'Genug von Oscar genervt worden'));
     telegram.setMyCommands(botCommands);
+  }
 
-    var event = Event((await telegram.getMe()).username!);
-
-    var teledart = TeleDart(Env.apiKey, event);
-
+  void setupEventListeners(TeleDart teledart) {
     teledart
         .onCommand('start')
         .listen((message) => message.reply(start(message)));
@@ -60,70 +94,75 @@ class TelegramBot {
           .onCommand(command.command.command)
           .listen((message) => message.reply(data.getNextDate(command.type)));
     }
+  }
+
+  void startBot(TeleDart teledart) {
     teledart.start();
+  }
 
-    var now = DateTime.now();
-    now.add(Duration(minutes: 1));
-
+  void scheduleCron(TeleDart teledart) {
     Cron().schedule(
-        Schedule.parse(_penetrationStartCron), () => executeCheck(teledart));
+        Schedule.parse(_reminderCron), () => executeCheck(teledart));
   }
 
   void executeCheck(TeleDart teledart) {
     var tomorrowTypes = data.checkTomorrow();
-    if (tomorrowTypes.isEmpty) {
+    if (tomorrowTypes.isEmpty || _currentRunningDay != null) {
       _currentRunningDay = null;
       return;
     }
     _currentRunningDay = Helper.today();
-    alert(teledart, tomorrowTypes);
+    startReminder(tomorrowTypes);
   }
 
-  void alert(TeleDart teledart, List<GarbageType> tomorrowTypes) {
-    if (_currentRunningDay == null) {
+  void startReminder(List<GarbageType> tomorrowTypes) {
+    _logger.info('Starting reminder cycle for ${tomorrowTypes.join(', ')}');
+    // Send initial alert
+    alert(tomorrowTypes);
+
+    // Schedule periodic reminders
+    _reminderTimer = Timer.periodic(_reminderDuration, (timer) {
+      alert(tomorrowTypes);
+    });
+  }
+
+  void alert(List<GarbageType> tomorrowTypes) {
+    if (_currentRunningDay == null) { // Check if the cycle was cancelled
+      _reminderTimer?.cancel();
       return;
     }
 
-    if (_currentRunningDay != null &&
-        _currentRunningDay!.isBefore(Helper.today())) {
-      for (var chatId in _registeredChats) {
-        teledart.sendMessage(
-            chatId, 'Es wurde wohl vergessen den Müll rauszubringen!');
-      }
-      _currentRunningDay = null;
-      return;
+    if (_currentRunningDay!.isBefore(Helper.today())) {
+      _notificationService.sendToAll('Es wurde wohl vergessen den Müll rauszubringen!');
+      stopReminder();
+    } else {
+      final garbageNames = tomorrowTypes.map(GarbageTypeName.getName).join(', ');
+      _notificationService.sendToAll('Morgen muss der Müll raus: ${garbageNames}');
     }
-
-    for (var chatId in _registeredChats) {
-      var garbageNames = List.empty(growable: true);
-      for (var element in tomorrowTypes) {
-        garbageNames.add(GarbageTypeName.getName(element));
-      }
-
-      teledart.sendMessage(
-          chatId, 'Morgen muss der Müll raus: ${garbageNames.join(', ')}');
-    }
-
-    Future.delayed(_penetrationDuration, () => alert(teledart, tomorrowTypes));
   }
 
   String start(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.add(chatId);
+    _chatStorage.saveChats(_registeredChats);
     return 'Ab jetzt gibts Nachrichten wenn der Müll raus muss';
   }
 
   String stop(TeleDartMessage message) {
     var chatId = message.chat.id;
     _registeredChats.remove(chatId);
+    _chatStorage.saveChats(_registeredChats);
     return 'Ab jetzt gibts keine Nachrichten mehr wenn der Müll raus muss';
   }
 
-  void done(TeleDart teledart) {
+  void stopReminder() {
+    _reminderTimer?.cancel();
     _currentRunningDay = null;
-    for (var chatId in _registeredChats) {
-      teledart.sendMessage(chatId, 'Müll wurde rausgebracht');
-    }
+  }
+
+  void done(TeleDart teledart) {
+    stopReminder();
+    _notificationService.sendToAll('Müll wurde rausgebracht. Super!');
   }
 }
 
